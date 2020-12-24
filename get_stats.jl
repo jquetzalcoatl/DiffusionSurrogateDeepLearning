@@ -3,9 +3,7 @@ using StatsBase
 
 parsed_args = parseCommandLine()
 
-
 PATH_in = "/PATH/TO/GENERATED/DATA/TwoSources/"
-
 PATH_out = "/PATH/OUT/"
 
 hparams = HyperParams(Drop1 = parsed_args["arg1"], Drop2 = parsed_args["arg2"],
