@@ -178,40 +178,40 @@ runFunction(st, stop, dir_name; ns=num_sources)
 
 
 #
-using BenchmarkTools
-gMx, gMy = gen_op(size(α₁,1))       # This generates the discrete laplacian as in CR's tutorial
-r1 = 1.0/400
-Dd = 1.0
-gMyA = CuArray(Float32.(zeros(size(gMx))))
-gAMx = CuArray(Float32.(zeros(size(gMx))))
-gDA = CuArray(Float32.(zeros(size(gMx))))
-
-in_cond, dist = genInitialCond(100, 5; ns=2)
-α₁ = in_cond
-u0 = α₁
-heatmap(in_cond|>cpu)
-prob = ODEProblem{false}(f,u0,(0.0,3000.0),α₁)
-@time sol = solve(prob,ROCK2(),progress=false,save_everystep=false,save_start=false)
-out = Array(sol[end])/maximum(sol[end])
-heatmap(out)
-
-
-
-#cpu
-in_cond, dist = genInitialCond(100, 5; ns=2)
-α₁ = Array(in_cond)
-u0 = Array(α₁)
-heatmap(in_cond|>cpu)
-prob = ODEProblem{false}(fCPU,u0,(0.0,3000.0),α₁)
-@time sol = solve(prob,ROCK2(),progress=false,save_everystep=false,save_start=false)
-out = Array(sol[end])/maximum(sol[end])
-heatmap(out)
-
-
-
-gMx, gMy = Array.(gen_op(size(α₁,1)))        # This generates the discrete laplacian as in CR's tutorial
-r1 = 1.0/400
-Dd = 1.0
-gMyA = Array(Float32.(zeros(size(gMx))))
-gAMx = Array(Float32.(zeros(size(gMx))))
-gDA = Array(Float32.(zeros(size(gMx))))
+# using BenchmarkTools
+# gMx, gMy = gen_op(size(α₁,1))       # This generates the discrete laplacian as in CR's tutorial
+# r1 = 1.0/400
+# Dd = 1.0
+# gMyA = CuArray(Float32.(zeros(size(gMx))))
+# gAMx = CuArray(Float32.(zeros(size(gMx))))
+# gDA = CuArray(Float32.(zeros(size(gMx))))
+#
+# in_cond, dist = genInitialCond(100, 5; ns=2)
+# α₁ = in_cond
+# u0 = α₁
+# heatmap(in_cond|>cpu)
+# prob = ODEProblem{false}(f,u0,(0.0,3000.0),α₁)
+# @time sol = solve(prob,ROCK2(),progress=false,save_everystep=false,save_start=false)
+# out = Array(sol[end])/maximum(sol[end])
+# heatmap(out)
+#
+#
+#
+# #cpu
+# in_cond, dist = genInitialCond(100, 5; ns=2)
+# α₁ = Array(in_cond)
+# u0 = Array(α₁)
+# heatmap(in_cond|>cpu)
+# prob = ODEProblem{false}(fCPU,u0,(0.0,3000.0),α₁)
+# @time sol = solve(prob,ROCK2(),progress=false,save_everystep=false,save_start=false)
+# out = Array(sol[end])/maximum(sol[end])
+# heatmap(out)
+#
+#
+#
+# gMx, gMy = Array.(gen_op(size(α₁,1)))        # This generates the discrete laplacian as in CR's tutorial
+# r1 = 1.0/400
+# Dd = 1.0
+# gMyA = Array(Float32.(zeros(size(gMx))))
+# gAMx = Array(Float32.(zeros(size(gMx))))
+# gDA = Array(Float32.(zeros(size(gMx))))
