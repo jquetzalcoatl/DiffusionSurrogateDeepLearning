@@ -22,7 +22,7 @@ where:
 ```
 <weight> helps balance the low and high field values (default = 1).
 <dir> Directory where things are saved (default = 1).
-<loss function> MSE = 0, MAE = 2, Foruth Power = 1 (default = 0).
+<loss function> MSE = 0, MAE = 2, Mean to Fourth Power = 1 (default = 0).
 <epochs> (default = 1000)
 <snapshots> Saves model, dictionary and plots after <snapshots> epochs (default = 500)
 <p1> Think of it as a Boolean variable that can either turn off (0) or on (1) NN 1. But it is actually a Float32. (default = 1.0f0)
