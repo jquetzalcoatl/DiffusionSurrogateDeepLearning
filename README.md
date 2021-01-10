@@ -7,10 +7,12 @@ This project aims at training a CNN that receives as input an initial condition 
 First we generate the (initial condition)-(stationary state) tuples from terminal as:
 
 ```
-$ julia genData.jl <index 1> <index 2> <dir name> <number of sources> <path out>
+$ julia genData.jl <index 1> <index 2> <dir name> <number of sources>
 ```
 
 where data_set_size = index_2 - index_1.
+
+Before generating the data, must specify the path to <dir name> in line 6.
 
 Then, from terminal:
 
