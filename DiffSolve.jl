@@ -61,7 +61,7 @@ function parseCommandLine(; dir=0)
                 default = 20f0
             # "arg6"
                 # arg_type=Int=
-	    "--p1"
+	    	"--p1"
                      help = "p1"
 		     arg_type = Float32
                      default = 1.0f0
@@ -81,6 +81,10 @@ function parseCommandLine(; dir=0)
 			help = "Continue training?"
 			arg_type = Int
 			default = 0
+		"--rollback", "-r"
+			help = "use rollback"
+			arg_type = Bool
+			default = true
 	   end
 
         return parse_args(s) # the result is a Dict{String,Any}
@@ -109,7 +113,7 @@ end
 
 function load_model( ; hparams=hparams, filename = "CNN.bson", path_from_dict = "No path", back_up=false)
 	if back_up
-	    path_from_dict == "No path" ? path = dict[:Models][end] :
+	    path_from_dict == "No path" ? (path = dict[:Models][end]; @info "Loading Model $path") :
 	        (path = path_from_dict; @info "Loading Model $path")
 	    model = gen_NN(hparams)
 	    NN_cpu = CNN(cpu(model.NN1), cpu(model.NN2))
@@ -128,6 +132,18 @@ function load_model( ; hparams=hparams, filename = "CNN.bson", path_from_dict = 
 	    model = CNN(gpu(NN_cpu.NN1), gpu(NN_cpu.NN2))
 	    return model#, opt
 	end
+end
+
+function load_model_CPU( ; hparams=hparams, filename = "CNN.bson", path_from_dict = "No path", back_up=false)
+	path_from_dict == "No path" ? path = dict[:Models][end] :
+        (path = path_from_dict; @info "Loading Model $path")
+    model = gen_NN(hparams)
+    NN_cpu = CNN(cpu(model.NN1), cpu(model.NN2))
+    # opt = (parsed_args["opt"] == 1 ?  Momentum() : ADAM(0.0001))
+    @load string(path) NN_cpu# opt
+    # model = CNN(gpu(NN_cpu.NN1), gpu(NN_cpu.NN2))
+    # return model#, opt
+	return NN_cpu
 end
 
 function load_data(path = PATH_in)
@@ -172,6 +188,7 @@ function init_dict(args)
 	dict[:Weight] = args.weight0
 	dict[:P] = [args.p1, args.p2]
 	dict[:Seed] = parsed_args["seed"]
+	dict[:Rollback] = parsed_args["rollback"]
     dict[:Plots] = Array{String,1}([])
     dict[:Plots2] = Array{String,1}([])
 	dict[:Plots3] = Array{String,1}([])
@@ -329,7 +346,66 @@ end
 
 NN3(x1,x2,args) = args.p1 .* x1 +  args.p2 .* x2
 
-# mean_loss, g = train(dataA; epochs=500, snap=3)
+function gen_NN_CPU(args)
+    lrelu(x) = leakyrelu(x, 0.02)
+    NN1 = Chain(Conv((3,3), 1 => 4, leakyrelu; stride = 1, pad = 1),
+        # x->leakyrelu.(x, 0.02),
+        Dropout(args.Drop1, dims = :),
+        BatchNorm(4),
+        Conv((3,3), 4 => 8, leakyrelu; stride = 1, pad = 1),
+        # x->leakyrelu.(x, 0.02),
+
+        BatchNorm(8),
+        Conv((3,3), 8 => 16, leakyrelu; stride = 1, pad = 1),
+        # x->leakyrelu.(x, 0.02),
+        BatchNorm(16),
+        Conv((3,3), 16 => 8, leakyrelu; stride = 1, pad = 1),
+        # x->leakyrelu.(x, 0.02),
+        BatchNorm(8),
+        Conv((3,3), 8 => 4, leakyrelu; stride = 1, pad = 1),
+        # x->leakyrelu.(x, 0.02),
+        BatchNorm(4),
+        # Conv((3,3), 4 => 1, identity; stride = 1, pad = 1),
+        Conv((3,3), 4 => 1, relu; stride = 1, pad = 1),
+        # x->leakyrelu.(x, 0.02),
+        Dropout(args.Drop2, dims = :),
+        BatchNorm(1)
+    )
+    NN2 = Chain(
+        Conv((3,3),1=>64, leakyrelu;stride=1,pad=1),
+        BatchNorm(64),
+        Dropout(args.Drop3, dims = :),
+        MeanPool((2,2); pad = 0, stride = 2),
+        Conv((3,3),64=>128, leakyrelu;stride=1,pad=1),
+
+        MeanPool((2,2); pad = 1, stride = 2),
+        Conv((3,3),128=>256, leakyrelu;stride=1,pad=1),
+
+        MeanPool((2,2); pad = 0, stride = 2),
+        Conv((3,3),256=>512, leakyrelu;stride=1,pad=1),
+
+        MeanPool((2,2); pad = 0, stride = 2),
+        Conv((3,3),512=>1024, leakyrelu;stride=1,pad=1),
+
+        MeanPool((2,2); pad = 0, stride = 2),
+        Conv((3,3),1024=>2048, leakyrelu;stride=1,pad=0),
+        # x-> upsample(x),
+        ConvTranspose((3,3),2048=>1024, leakyrelu;stride=2,pad=0),
+        # # x-> upsample(x),
+        ConvTranspose((3,3),1024=>512, leakyrelu;stride=2,pad=0),
+        # # x-> upsample(x),
+        ConvTranspose((3,3),512=>256, leakyrelu;stride=2,pad=1),
+        # # # x-> upsample(x),
+        ConvTranspose((3,3),256=>128, leakyrelu;stride=2,pad=1),
+        # # # x-> upsample(x),
+        ConvTranspose((3,3),128=>64, leakyrelu;stride=2,pad=0),
+        # # # x-> upsample(x),
+        Dropout(args.Drop4, dims = :),
+        ConvTranspose((4,4),64=>1, relu;stride=2,pad=2),
+        BatchNorm(1)
+    )
+    return CNN(NN1, NN2)
+end
 
 function (m::CNN)(x)
     x1 = m.NN1(x)
@@ -365,9 +441,15 @@ function myPlots(dataA, gNet,l, l_test, l_val, opt; idxIn = 0, svfig = false,
     fig1 = heatmap(im_x, xaxis=false, yaxis=false)
     fig2 = heatmap(im_ŷ, xaxis=false, yaxis=false)
     fig3 = heatmap(im_y, xaxis=false, yaxis=false)
-    fig4 = heatmap(abs.(im_y .- im_ŷ), xaxis=false, yaxis=false)
-    fig5 = heatmap(abs.(im_y .- im_ŷ) ./(im_y .+ 1e-5), xaxis=false, yaxis=false,
-			c=cgrad(:default), clims=(0,1))
+    # fig4 = heatmap(abs.(im_y .- im_ŷ), xaxis=false, yaxis=false)
+    # fig5 = heatmap(abs.(im_y .- im_ŷ) ./(im_y .+ 1e-5), xaxis=false, yaxis=false,
+	# 		c=cgrad(:default), clims=(0,1))
+	fig4 = heatmap(abs.(im_y .- im_ŷ), xaxis=false, yaxis=false,
+			c=cgrad(:roma, scale = :exp))
+
+	fig5 = heatmap(abs.(im_y .- im_ŷ) ./(im_y .+ 1e-5), xaxis=false, yaxis=false,
+			c=cgrad(:roma,  [0.05, 0.1, 0.5], categorical = true), clims=(0,1),
+			xticks=false)
     # fig5 = scatter(l, label="loss", xlabel=:epochs)
     fig6 = plot([Vector{Float32}(l) (l_test + l_val)/2.0],
             yscale=:log10, frame=:box, xlabel=:epochs,
@@ -503,11 +585,11 @@ function myPlots(dataA, g, c::Int, dict; sz=5, svfig = false,
         savefig(f2, dict[:Plots3][end])
 		###
 		push!(dict[:Plots3], PATH_out * "Misc/Pl/Hist_" * filename)
-		f, s1 = get_slices(x,y)
-		fig2 = plot(f..., size=(1400,900),
+		f, s1 = get_slices(x,y; nslices=20)
+		fig2 = plot(f..., size=(2800,1800),
 				left_margin = 5Plots.mm, top_margin = 10Plots.mm,
 				bottom_margin = 10Plots.mm, right_margin = 10Plots.mm,
-				tickfont = font(10, "Helvetica"))
+				tickfont = font(13, "Helvetica"))
         savefig(fig2, dict[:Plots3][end])
 
 		data_path = split(PATH_out * "Misc/Pl/Data_" * filename,".")[1] * ".dat"
@@ -526,8 +608,8 @@ function myPlots(dataA, g, c::Int, dict, cc::Int; sz=5, svfig = false,
 	filename="plot4.png", timestamp=false, printplots=true)
 
     x, y = get_samp(dataA, g; sz0=sz)
-	f, _ = get_slices(x,y)
-	fig = plot(f..., size=(1400,900),
+	f, _ = get_slices(x,y; nslices=20)
+	fig = plot(f..., size=(2800,1800),
 			left_margin = 5Plots.mm, top_margin = 10Plots.mm,
 			bottom_margin = 10Plots.mm, right_margin = 10Plots.mm,
 			tickfont = font(13, "Helvetica"))
@@ -563,17 +645,18 @@ function get_samp(dataA, g; sz0=5)
     y1,y2
 end
 
-function get_slices(xx,yy)
+function get_slices(xx,yy; nslices = 10)
         xθ, yθ = 1/√2*(xx .- yy), 1/√2*(xx .+ yy)
         # f1 = histogram(yθ, label="y rotated", frame=:box, normalized=true,
         #         title="total points = $(sum(size(yθ,1)))")
 		f1 = plot(yθ, seriestype=:barhist, width=0, label="y=x", frame=:box, normalized=true,
                 title="total points = $(sum(size(yθ,1)))")
         f = [f1]
-		stats = zeros(10,2)
-        for i in 1:10
-                up = round(0.1*i, sigdigits=1)
-                down = round(0.1*(i-1), sigdigits=1)
+		Δs = 1/nslices
+		stats = zeros(nslices,2)
+        for i in 1:nslices
+                up = floor(Δs*i, sigdigits=2)
+                down = floor(Δs*(i-1), sigdigits=2)
                 yl = findall(x->down<x<up, yθ)
 				stats[i, 1], stats[i, 2] = mean(xθ[yl]), std(xθ[yl])
                 # h = histogram(xθ[yl],
@@ -588,7 +671,8 @@ function get_slices(xx,yy)
                         title="$down<field value<$up", legend=false,
                         label="m=$(round(mean(xθ[yl]),sigdigits=2)) \n s=$(round(std(xθ[yl]),sigdigits=2))",
                         frame=:box, normalized=true, xlabel="|ŷ⟩ - |y⟩", ylabel="PDF",
-						xlim=(stats[i, 1] - 4*stats[i, 2],stats[i, 1] + 4*stats[i, 2]))
+						xlim=(stats[i, 1] - 4*stats[i, 2],stats[i, 1] + 4*stats[i, 2]),
+						xticks=([-floor(4*stats[i, 2], sigdigits=1), 0, floor(4*stats[i, 2], sigdigits=1)]))
 
 				m, s = stats[i, 1], stats[i, 2]
 				lowlim, uplim = m - 4 * s, m + 4 * s
@@ -708,7 +792,7 @@ function save_loss_data(ml, ml_te, ml_val)
 end
 
 function train( ; epochs=200, snap=25)
-	e_len, e_thrs = 22, 10
+	e_len, e_thrs, rb = 22, 10, 0
 	Random.seed!(dict[:Seed])
     dataA, dataA_test, dataA_val = genDataset()
     gNet = gen_NN(hparams)
@@ -756,23 +840,27 @@ function train( ; epochs=200, snap=25)
 		if epoch >= e_len
 			δ_av = mean(abs.(mean_loss[end-e_len+2:end-1] - mean_loss[end-e_len+1:end-2]))
 			δ = mean_loss[end] - mean_loss[end-1]
-			if δ > e_thrs* δ_av
+			if δ > e_thrs* δ_av && dict[:Rollback]
 				pop!(mean_loss)
 				pop!(mean_loss_test)
 				pop!(mean_loss_val)
 				gNet = backup(gNet, 0)
 				ps = params(gNet.NN1, gNet.NN2)
+				rb = rb + 1
 			end
 			@info "Average delta: $δ_av "
 			@info "delta: $δ "
 		end
 		epoch % 5 == 0 ? backup(gNet, 1; mean_loss=mean_loss, mean_loss_test=mean_loss_test, mean_loss_val=mean_loss_val) : nothing
     end
+	dict[:N_Rollbacks] = rb
+	dict[:Final_state] = "Training ended succesfully!"
+	@save dict[:Path] dict
     mean_loss, mean_loss_test, mean_loss_val, gNet, opt
 end
 
 function continue_train(; epochs=200, snap=25)
-	e_len, e_thrs = 22, 10
+	e_len, e_thrs, rb = 22, 10, 0
 	# Random.seed!(dict[:Seed])
     dataA, dataA_test, dataA_val = genDataset(dict)
 	gNet = gen_NN(hparams)
@@ -829,17 +917,21 @@ function continue_train(; epochs=200, snap=25)
 		if epoch >= e_len
 			δ_av = mean(abs.(mean_loss[end-e_len+2:end-1] - mean_loss[end-e_len+1:end-2]))
 			δ = mean_loss[end] - mean_loss[end-1]
-			if δ > e_thrs* δ_av
+			if δ > e_thrs* δ_av && dict[:Rollback]
 				pop!(mean_loss)
 				pop!(mean_loss_test)
 				pop!(mean_loss_val)
 				gNet = backup(gNet, 0)
 				ps = params(gNet.NN1, gNet.NN2)
+				rb = rb + 1
 			end
 			@info "Average delta: $δ_av "
 			@info "delta: $δ "
 		end
 		epoch % 5 == 0 ? backup(gNet, 1; mean_loss=mean_loss, mean_loss_test=mean_loss_test, mean_loss_val=mean_loss_val) : nothing
     end
+	dict[:N_Rollbacks] = rb
+	dict[:Final_state] = "Training ended succesfully!"
+	@save dict[:Path] dict
     mean_loss, mean_loss_test, mean_loss_val, gNet, opt
 end
