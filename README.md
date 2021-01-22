@@ -7,10 +7,12 @@ This project aims at training a CNN that receives as input an initial condition 
 First we generate the (initial condition)-(stationary state) tuples from terminal as:
 
 ```
-$ julia genData.jl <index 1> <index 2> <dir name> <number of sources> <path out>
+$ julia genData.jl <index 1> <index 2> <dir name> <number of sources>
 ```
 
 where data_set_size = index_2 - index_1.
+
+Before generating the data, must specify the path to <dir name> in line 6.
 
 Then, from terminal:
 
@@ -22,7 +24,7 @@ where:
 ```
 <weight> helps balance the low and high field values (default = 1).
 <dir> Directory where things are saved (default = 1).
-<loss function> MSE = 0, MAE = 2, Foruth Power = 1 (default = 0).
+<loss function> MSE = 0, MAE = 2, Mean to Fourth Power = 1 (default = 0).
 <epochs> (default = 1000)
 <snapshots> Saves model, dictionary and plots after <snapshots> epochs (default = 500)
 <p1> Think of it as a Boolean variable that can either turn off (0) or on (1) NN 1. But it is actually a Float32. (default = 1.0f0)
