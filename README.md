@@ -1,5 +1,7 @@
 # Stationary Diffusion State ML Surrogate using Flux and CuArrays.
 
+Toledo-Marín, J. Q., Fox, G., Sluka, J. P., & Glazier, J. A. (2021). Deep learning approaches to surrogates for solving the diffusion equation for mechanistic real-world simulations. arXiv preprint arXiv:2102.05527.
+
 ![alt text](https://github.com/jquetzalcoatl/DiffusionSurrogate/blob/master/Figs/Fig1.png)
 
 This project aims at training a CNN that receives as input an initial condition of a Diffusion-like equation and outputs the stationary solution.
